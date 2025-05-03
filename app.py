@@ -1,30 +1,33 @@
 from flask import Flask, render_template, request, redirect, url_for, flash
+import requests
 import time
-import webbrowser
-import pyautogui
-import pyperclip
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Needed for flashing messages
+app.secret_key = 'your_secret_key'  # Used for flashing messages
 
-def send_whatsapp_message(phone_number, message, num_times, delay_seconds):
+API_KEY = 'M7zmke8K8fHV'  # Your TextMeBot API key
+API_URL = 'https://api.textmebot.com/send.php'
+
+def add_invisible_char(message, index):
+    # Adds zero-width spaces to make messages technically different
+    return message + ("\u200B" * index)
+
+def send_whatsapp_message(phone, message):
     try:
-        chat_url = f"https://web.whatsapp.com/send?phone={phone_number}&text={message}"
-        webbrowser.open(chat_url)
-        time.sleep(15)  # Wait for WhatsApp Web to load
-
-        # Send first message
-        pyautogui.press('enter')
-
-        for i in range(1, num_times):
-            time.sleep(delay_seconds)
-            pyperclip.copy(message)
-            pyautogui.hotkey('ctrl', 'v')
-            pyautogui.press('enter')
-
+        payload = {
+            'recipient': phone,
+            'apikey': API_KEY,
+            'text': message
+        }
+        response = requests.get(API_URL, params=payload)
+        if response.status_code == 200:
+            if "error" in response.text.lower():
+                return f"CallMeBot error: {response.text}"
+            return "Message sent successfully."
+        else:
+            return f"Error: Status code {response.status_code}"
     except Exception as e:
-        print(f"Error: {e}")
-        raise e
+        return f"Exception: {str(e)}"
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -34,14 +37,19 @@ def index():
         count = int(request.form['count'])
         delay = int(request.form['delay'])
 
-        try:
-            send_whatsapp_message(phone, message, count, delay)
-            flash("Messages sent successfully!", "success")
-        except Exception as e:
-            flash(f"An error occurred: {str(e)}", "danger")
+        for i in range(count):
+            unique_message = add_invisible_char(message, i)
+            result = send_whatsapp_message(phone, unique_message)
+            if "successfully" in result.lower():
+                flash(f"Message {i+1} sent successfully.", "success")
+            else:
+                flash(f"Message {i+1} failed: {result}", "danger")
+            if i < count - 1:
+                time.sleep(delay)
 
         return redirect(url_for('index'))
 
     return render_template('index.html')
+
 if __name__ == '__main__':
     app.run(debug=True)
